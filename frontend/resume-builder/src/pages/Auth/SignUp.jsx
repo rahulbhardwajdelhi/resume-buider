@@ -6,7 +6,6 @@ import ProfilePhotoSelector from '../../components/Inputs/ProfilePhotoSelector';
 import axiosInstance from '../../utils/axiosInstance';
 import { API_PATHS } from '../../utils/apiPaths';
 import { UserContext } from '../../context/userContext';
-import uploadImage from '../../utils/uploadImage';
 
 const SignUp = ({setCurrentPage}) => {
   const [profilePic, setProfilePic] = useState(null); 
@@ -21,7 +20,6 @@ const SignUp = ({setCurrentPage}) => {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    let profileImageUrl = "";
 
     if(!fullName) {
       setError("Please enter full name.");
@@ -40,23 +38,39 @@ const SignUp = ({setCurrentPage}) => {
 
     setError("");
 
-    try {
-
-      if(profilePic){
-        const imgUploadRes = await uploadImage(profilePic);
-        profileImageUrl = imgUploadRes.imageUrl || "";
-      }
-
+    try { 
+      // First register user (without image)
       const response = await axiosInstance.post(API_PATHS.AUTH.REGISTER, { 
         name: fullName,
         email,
         password,
-        profileImageUrl,
+        profileImageUrl: "",
       });
       const {token} = response.data;
       if (token) {
         localStorage.setItem("token", token);
-        updateUser(response.data);
+
+        // If profile image chosen, upload it after auth (protected route)
+        if (profilePic) {
+          try {
+            const formData = new FormData();
+            formData.append("image", profilePic);
+            const uploadRes = await axiosInstance.post(
+              API_PATHS.IMAGE.UPLOAD_IMAGE,
+              formData,
+              { headers: { "Content-Type": "multipart/form-data" } }
+            );
+            updateUser({
+              ...response.data,
+              profileImageUrl: uploadRes?.data?.imageUrl || null,
+            });
+          } catch (imgErr) {
+            // Image upload failure shouldn't block signup
+            updateUser(response.data);
+          }
+        } else {
+          updateUser(response.data);
+        }
         navigate("/dashboard");
       }     
     } catch (error) {

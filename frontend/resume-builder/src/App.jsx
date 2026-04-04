@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import LandingPage from "./pages/LandingPage"
 import Dashboard from "./pages/Home/Dashboard"
 import EditResume from './pages/ResumeUpdate/EditResume'
+import ScreeningPage from './pages/ScreeningPage'
 import UserProvider from './context/userContext'
 
 const App = () => {
@@ -14,8 +15,10 @@ const App = () => {
         <Routes>
           {/* Default Routes */}
           <Route path='/' element={<LandingPage />}/>
+          <Route path='/home' element={<Dashboard />} />
           <Route path='/dashboard' element={<Dashboard />} />
           <Route path='/resume/:resumeId' element={<EditResume />} />
+          <Route path='/screening' element={<ScreeningPage />} />
         </Routes>
       </Router>
     </div>

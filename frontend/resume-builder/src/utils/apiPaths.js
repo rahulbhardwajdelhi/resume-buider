@@ -19,5 +19,9 @@ export const API_PATHS = {
 
     IMAGE: {
         UPLOAD_IMAGE: `${BASE_URL}/api/auth/upload-image`,
-    }
+    },
+
+    ATS: {
+        SCORE: `${BASE_URL}/api/ats-score`,
+    },
 };

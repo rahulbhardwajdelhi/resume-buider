@@ -34,6 +34,10 @@ const EditResume = () => {
   const [baseWidth, setBaseWidth] = useState(800);
   const [openThemeSelector, setOpenThemeSelector] = useState(false);
   const [openPreviewModal, setOpenPreviewModal] = useState(false);
+  const [openAtsModal, setOpenAtsModal] = useState(false);
+  const [jdText, setJdText] = useState("");
+  const [atsLoading, setAtsLoading] = useState(false);
+  const [atsResult, setAtsResult] = useState(null);
 
   const [currentPage, setCurrentPage] = useState("profile-info"); 
   const [progress, setProgress] = useState(0);
@@ -109,6 +113,122 @@ const EditResume = () => {
 
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Compose a plain-text version of the resume for ATS scoring
+  const composeResumePlainText = (data) => {
+    if (!data) return "";
+    const lines = [];
+
+    const p = data.profileInfo || {};
+    if (p.fullName) lines.push(`${p.fullName}`);
+    if (p.designation) lines.push(`${p.designation}`);
+    if (p.summary) lines.push(`Summary: ${p.summary}`);
+
+    const c = data.contactInfo || {};
+    const contactBits = [c.email, c.phone, c.location, c.linkedin, c.github, c.website]
+      .filter(Boolean)
+      .join(" | ");
+    if (contactBits) lines.push(contactBits);
+
+    if (Array.isArray(data.workExperience)) {
+      lines.push("Work Experience:");
+      data.workExperience.forEach((w) => {
+        const when = [w.startDate, w.endDate].filter(Boolean).join(" - ");
+        lines.push(
+          [`- ${w.role || ""}`, w.company ? `@ ${w.company}` : "", when ? `(${when})` : ""]
+            .filter(Boolean)
+            .join(" ")
+        );
+        if (w.description) lines.push(`  ${w.description}`);
+      });
+    }
+
+    if (Array.isArray(data.education)) {
+      lines.push("Education:");
+      data.education.forEach((e) => {
+        const when = [e.startDate, e.endDate].filter(Boolean).join(" - ");
+        lines.push(
+          [`- ${e.degree || ""}`, e.institution ? `@ ${e.institution}` : "", when ? `(${when})` : ""]
+            .filter(Boolean)
+            .join(" ")
+        );
+      });
+    }
+
+    if (Array.isArray(data.skills)) {
+      const skills = data.skills
+        .map((s) => s?.name)
+        .filter(Boolean)
+        .join(", ");
+      if (skills) lines.push(`Skills: ${skills}`);
+    }
+
+    if (Array.isArray(data.projects)) {
+      lines.push("Projects:");
+      data.projects.forEach((p) => {
+        const bits = [p.title, p.github, p.liveDemo].filter(Boolean).join(" | ");
+        if (bits) lines.push(`- ${bits}`);
+        if (p.description) lines.push(`  ${p.description}`);
+      });
+    }
+
+    if (Array.isArray(data.certifications)) {
+      lines.push("Certifications:");
+      data.certifications.forEach((c) => {
+        const bits = [c.title, c.issuer, c.year].filter(Boolean).join(" | ");
+        if (bits) lines.push(`- ${bits}`);
+      });
+    }
+
+    if (Array.isArray(data.languages)) {
+      const langs = data.languages.map((l) => l?.name).filter(Boolean).join(", ");
+      if (langs) lines.push(`Languages: ${langs}`);
+    }
+
+    if (Array.isArray(data.interests)) {
+      const ints = data.interests.filter(Boolean).join(", ");
+      if (ints) lines.push(`Interests: ${ints}`);
+    }
+
+    return lines.join("\n");
+  };
+
+  const missingSkillsList =
+    atsResult?.missing && atsResult?.missing !== "None"
+      ? atsResult.missing.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
+  const normalizedMissing = missingSkillsList.map((s) => s.toLowerCase());
+  const hasAny = (needles) => needles.some((n) => normalizedMissing.some((m) => m.includes(n)));
+
+  const needsSkills = missingSkillsList.length > 0;
+  const needsSummary = missingSkillsList.length > 0;
+  const needsProjects = hasAny([
+    "react",
+    "node",
+    "javascript",
+    "typescript",
+    "rest api",
+    "docker",
+    "kubernetes",
+    "aws",
+    "azure",
+    "gcp",
+    "cloud",
+    "github",
+  ]);
+  const needsWork = hasAny([
+    "agile",
+    "scrum",
+    "devops",
+    "docker",
+    "kubernetes",
+    "aws",
+    "azure",
+    "gcp",
+    "lead",
+    "mentor",
+  ]);
 
   // Validate Inputs
   const validateAndNext = (e) => {
@@ -237,6 +357,29 @@ const EditResume = () => {
       setProgress(percent);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  };
+
+  // Jump to a specific resume step (used by ATS "field changes" actions)
+  const jumpToStep = (stepKey) => {
+    const pages = [
+      "profile-info",
+      "contact-info",
+      "work-experience",
+      "education-info",
+      "skills",
+      "projects",
+      "certifications",
+      "additionalInfo",
+    ];
+
+    const idx = pages.indexOf(stepKey);
+    if (idx === -1) return;
+
+    setCurrentPage(stepKey);
+    const percent = Math.round((idx / (pages.length - 1)) * 100);
+    setProgress(percent);
+    setOpenAtsModal(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Function to navigate to the previous page
@@ -712,12 +855,152 @@ const uploadResumeImages = async () => {
         actionBtnIcon={<LuDownload className="text-[16px]" />}
         onActionClick={() => reactToPrintFn()}
       >
-        <div ref={resumeDownloadRef} className="w-[98vw] h-[90vh]">
+        <div ref={resumeDownloadRef} className="w-[98vw] h-[78vh]">
           <RenderResume
             templateId={resumeData?.template?.theme || ""}
             resumeData={resumeData}
             colorPalette={resumeData?.template?.colorPalette || []}
           />
+        </div>
+        <div className="p-4 border-t flex justify-end">
+          {currentPage === "additionalInfo" ? (
+            <button
+              className="btn-small-light"
+              onClick={() => {
+                setOpenPreviewModal(false);
+                setAtsResult(null);
+                setJdText("");
+                setOpenAtsModal(true);
+              }}
+            >
+              Check ATS Score
+            </button>
+          ) : (
+            <div className="text-xs text-gray-500 pr-2">
+              Finish the resume steps to enable ATS score.
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={openAtsModal}
+        onClose={() => {
+          setOpenAtsModal(false);
+          setAtsResult(null);
+          setJdText("");
+        }}
+        title="ATS Score Checker"
+        showActionBtn
+        actionBtnText={atsLoading ? "Scoring..." : "Score"}
+        onActionClick={async () => {
+          if (!jdText.trim()) {
+            toast.error("Please paste a Job Description.");
+            return;
+          }
+          try {
+            setAtsLoading(true);
+            const resumePlain = composeResumePlainText(resumeData);
+            const { data } = await axiosInstance.post(API_PATHS.ATS.SCORE, {
+              jd_text: jdText,
+              resume_text: resumePlain,
+              name: resumeData?.title || "resume"
+            }, {
+              // First ATS run can take time (model load/download on Python service)
+              timeout: 180000,
+            });
+            setAtsResult(data?.result || null);
+          } catch (err) {
+            console.error("ATS scoring failed:", err);
+            if (err?.code === "ECONNABORTED") {
+              toast.error("ATS scoring timed out. Please retry once; first run may take longer.");
+            } else {
+              toast.error(err?.response?.data?.message || "Failed to get ATS score.");
+            }
+          } finally {
+            setAtsLoading(false);
+          }
+        }}
+      >
+        <div className="w-[90vw] max-w-3xl">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Paste Job Description
+          </label>
+          <textarea
+            className="w-full h-40 border rounded p-2 text-sm"
+            placeholder="Paste JD here..."
+            value={jdText}
+            onChange={(e) => setJdText(e.target.value)}
+          />
+
+          {atsResult && (
+            <div className="mt-4 p-3 border rounded bg-purple-50">
+              <div className="text-sm font-semibold mb-1">Results</div>
+              <div className="text-sm">AI Score: {atsResult?.ai ?? "-"}</div>
+              <div className="text-sm">ATS Score: {atsResult?.ats ?? "-"}</div>
+              <div className="text-sm">Final Score: {atsResult?.final ?? "-"}</div>
+              <div className="text-sm mt-2">
+                Missing Skills: {atsResult?.missing || "None"}
+              </div>
+              <div className="text-sm mt-1">
+                Suggested: {atsResult?.suggestion || "-"}
+              </div>
+            </div>
+          )}
+
+          {atsResult && (
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-2">Field changes to make</div>
+
+              {atsResult?.missing && atsResult?.missing !== "None" ? (
+                <>
+                  <div className="text-xs text-gray-600 mb-2">
+                    Add the missing keywords to the relevant sections:
+                  </div>
+                  <div className="text-sm font-medium">
+                    Missing: {atsResult?.missing}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {needsSummary && (
+                      <button
+                        className="btn-small-light"
+                        onClick={() => jumpToStep("profile-info")}
+                      >
+                        Edit Summary
+                      </button>
+                    )}
+                    {needsSkills && (
+                      <button
+                        className="btn-small-light"
+                        onClick={() => jumpToStep("skills")}
+                      >
+                        Edit Skills
+                      </button>
+                    )}
+                    {needsProjects && (
+                      <button
+                        className="btn-small-light"
+                        onClick={() => jumpToStep("projects")}
+                      >
+                        Edit Projects
+                      </button>
+                    )}
+                    {needsWork && (
+                      <button
+                        className="btn-small-light"
+                        onClick={() => jumpToStep("work-experience")}
+                      >
+                        Edit Work Exp
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm">No changes needed. Your resume matches the JD skills well.</div>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
     </DashboardLayout>
@@ -725,3 +1008,4 @@ const uploadResumeImages = async () => {
 };
 
 export default EditResume;
+

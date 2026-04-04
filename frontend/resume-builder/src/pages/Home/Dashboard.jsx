@@ -4,6 +4,7 @@ import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import {LuCirclePlus} from "react-icons/lu";
+import { MdAnalytics } from "react-icons/md";
 import moment from "moment";
 import ResumeSummaryCard from "../../components/Cards/ResumeSummaryCard";
 import CreateResumeForm from "./CreateResumeForm";
@@ -38,6 +39,17 @@ const Dashboard = () => {
           <LuCirclePlus className="text-xl text-purp" />
         </div>
         <h3 className="font-medium text-gray-800">Add New Resume</h3>
+      </div>
+
+      <div 
+        className="h-[300px] flex flex-col gap-5 items-center justify-center bg-white rounded-lg border border-blue-100 hover:border-blue-300 hover:bg-blue-50/5 cursor-pointer"
+        onClick={() => navigate('/screening')}
+      >
+        <div className="w-12 h-12 flex items-center justify-center bg-blue-200/60 rounded-2xl">
+          <MdAnalytics className="text-xl text-blue-600" />
+        </div>
+        <h3 className="font-medium text-gray-800">ATS Screening</h3>
+        <p className="text-xs text-gray-500 text-center px-2">Analyze your resume against job descriptions</p>
       </div>
 
       {allResumes?.map((resume) => (
